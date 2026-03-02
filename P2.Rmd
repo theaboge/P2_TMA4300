@@ -1,0 +1,17 @@
+---
+title: "Project 2 – TMA4300"
+author: "Karine Grande & Thea Boge"
+date: "2026-03-02"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Problem 1
+We suppose that...
+```{r}
+
+```
+
