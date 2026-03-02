@@ -10,8 +10,413 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Problem 1
-We suppose that...
-```{r}
+We suppose that the joint density of $U$, $Z$ up to a normalizing constant is 
+\[
+f^{*}_{U,Z}(u,z) =
+\begin{cases}
+1, & \text{for } 0 < u < e^{-z^2/2}, \\
+0, & \text{elsewhere.}
+\end{cases}
+\]
 
+## a) 
+If a joint density is known up to proportionality, the full conditional of one variable is obtained by 
+\[
+f_{X|Y} (x|y) \propto f^{*}_{U,Z}(u,z) \textit{as a function of x}
+\]
+
+### Conditional ditribution of $U|Z=z$
+
+Fix $z$. The joint density becomes 
+\[
+f^{*}_{U,Z}(u,z) =
+\begin{cases}
+1, & \text{for } 0 < u < e^{-z^2/2}, \\
+0, & \text{elsewhere.}
+\end{cases}
+\]
+As a function of $u$, this is constant on the interval $(0,e^{-x^{\frac{2}{2}}})$. 
+
+The normalizing constant is
+\[
+\int_0^{e^{-z^2/2}} 1 \, du =e^{-z^2/2}.
+\]
+
+Therefore,
+\[
+f_{U \mid Z}(u \mid z) = \frac{1}{e^{-z^2/2}} = e^{z^2/2},\quad 0 < u < e^{-z^2/2}.
+\]
+
+Hence,
+\[
+U \mid Z = z \sim \mathrm{Unif} \big(0, e^{-z^2/2}\big).
+\]. 
+
+### Conditional ditribution of $Z|U=u$
+Fix $u$. The support condition is $0 < u < e^{-z^2/2}$.
+
+Solving for $z$:
+\[
+u < e^{-z^2/2} \quad \Longleftrightarrow \quad \log u < -\frac{z^2}{2}
+\]
+
+\[
+-2 \log u > z^2
+\]
+
+\[
+|z| < \sqrt{-2 \log u}
+\]
+
+Define
+\[
+a(u) = \sqrt{-2 \log u}
+\]
+
+Therefore, the support of the conditional distribution is
+\[
+z \in (-a(u), a(u)).
+\]
+
+Within this interval the joint density is constant and equal to 1. The normalizing constant is therefore the length of the interval:
+\[
+\int_{-a(u)}^{a(u)} 1 \, dz = 2a(u).
+\]
+
+Thus, the full conditional density of \( Z \mid U = u \) is
+
+\[
+f_{Z \mid U}(z \mid u) = \frac{1}{2a(u)},\quad |z| < a(u),
+\]
+
+where
+\[
+a(u) = \sqrt{-2 \log u}.
+\]
+
+Thus,
+\[
+Z \mid U = u \sim \mathrm{Unif}\big(-a(u), a(u)\big).
+\]
+
+### Gibbs Sampler
+
+Given an initial valid point \( (U^{(0)}, Z^{(0)}) \) satisfying
+\( 0 < U^{(0)} < e^{-(Z^{(0)})^2/2} \),
+iterate for \( t = 1, \dots, n \):
+
+\begin{enumerate}
+    \item Sample
+    \[
+    U^{(t)} \sim 
+    \mathrm{Unif}\left(0, e^{-(Z^{(t-1)})^2/2}\right).
+    \]
+
+    \item Define
+    \[
+    a^{(t)} = \sqrt{-2 \log U^{(t)}}.
+    \]
+
+    \item Sample
+    \[
+    Z^{(t)} \sim 
+    \mathrm{Unif}\left(-a^{(t)},\, a^{(t)}\right).
+    \]
+\end{enumerate}
+
+This iterative scheme defines a Markov chain whose stationary distribution is the joint density \( f_{U,Z}(u,z) \).The marginal stationary distribution of \( Z \) is \( \mathcal{N}(0,1) \).
+
+```{r}
+gibbs_normal <- function(n, u_init = 0.5, z_init = 0) {
+  
+  U <- numeric(n)
+  Z <- numeric(n)
+  
+  U[1] <- u_init
+  Z[1] <- z_init
+  
+  for (t in 2:n) {
+    
+    # Sample U | Z
+    U[t] <- runif(1, 0, exp(-(Z[t-1]^2)/2))
+    
+    # Compute truncation bound
+    a <- sqrt(-2 * log(U[t]))
+    
+    # Sample Z | U
+    Z[t] <- runif(1, -a, a)
+  }
+  
+  Z  # return only Z since that is the target
+}
 ```
 
+```{r}
+# Run Gibbs sampler
+set.seed(123)
+Z <- gibbs_normal(10000)
+
+# Burn-in removal
+Z_post <- Z[1001:10000]
+
+# Diagnostics
+mean(Z_post)
+var(Z_post)
+
+hist(Z_post, probability = TRUE, breaks = 40)
+curve(dnorm(x), col="red", add=TRUE)
+```
+The posterior sample mean is approximately
+\[
+\hat{\mu} \approx -0.019,
+\]
+and the empirical variance is
+\[
+\hat{\sigma}^2 \approx 0.97.
+\]
+
+Both values are close to the theoretical mean and variance,
+\[
+\mathbb{E}[Z] = 0,\qquad \mathrm{Var}(Z) = 1,
+\]
+of a standard normal distribution.
+
+The histogram aligns well with the standard normal density curve, confirming that the Gibbs sampler correctly targets
+\[
+Z \sim \mathcal{N}(0,1).
+\]
+
+## b)
+We determine the marginal distribution of \( Z \) by integrating out \( U \).
+
+Recall that the joint density (up to normalization) is
+
+\[
+f^*_{U,Z}(u,z) =
+\begin{cases}
+1, & 0 < u < e^{-z^2/2}, \\
+0, & \text{otherwise}.
+\end{cases}
+\]
+
+The marginal density of \( Z \) is therefore
+
+\[
+f_Z(z)
+=
+\int_0^{e^{-z^2/2}} 1 \, du
+=
+e^{-z^2/2}.
+\]
+
+Thus,
+
+\[
+f_Z(z) \propto e^{-z^2/2}.
+\]
+
+
+Since
+\[
+\int_{-\infty}^{\infty} e^{-z^2/2} \, dz
+=
+\sqrt{2\pi},
+\]
+the normalized density is
+
+\[
+f_Z(z)
+=
+\frac{1}{\sqrt{2\pi}} e^{-z^2/2}.
+\]
+
+Therefore,
+\[
+Z \sim \mathcal{N}(0,1).
+\]
+Hence, discarding the \( U \)-values from the Gibbs sampler yields a sample from a standard normal distribution.
+
+## c)
+### Correlation between successive Gibbs samples $Z_{n-1}$ and $Z_n$}
+
+From the Gibbs sampler we have
+\[
+Z_n \mid U_n \sim \mathrm{Unif}\!\big(-a(U_n), a(U_n)\big),
+\qquad
+a(u) = \sqrt{-2 \log u}.
+\]
+
+This conditional distribution is symmetric around zero. Therefore,
+\[
+\mathbb{E}[Z_n \mid U_n] = 0.
+\]
+
+By the law of total expectation,
+\[
+\mathbb{E}[Z_n]
+=
+\mathbb{E}\!\left[\mathbb{E}[Z_n \mid U_n]\right]
+=
+\mathbb{E}[0]
+=
+0.
+\]
+
+Since the Gibbs sampler has stationary distribution $Z_n \sim \mathcal{N}(0,1)$, it follows that
+\[
+\mathbb{E}[Z_{n-1}] = \mathbb{E}[Z_n] = 0.
+\]
+
+We now compute the covariance. By definition,
+\[
+\mathrm{Cov}(Z_{n-1}, Z_n)
+=
+\mathbb{E}[Z_{n-1}Z_n]
+-
+\mathbb{E}[Z_{n-1}]\mathbb{E}[Z_n].
+\]
+
+Because both expectations are zero, this reduces to
+\[
+\mathrm{Cov}(Z_{n-1}, Z_n)
+=
+\mathbb{E}[Z_{n-1}Z_n].
+\]
+
+Using the tower property (law of iterated expectation),
+\[
+\mathbb{E}[Z_{n-1}Z_n]
+=
+\mathbb{E}\!\left[
+\mathbb{E}[Z_{n-1}Z_n \mid U_n]
+\right].
+\]
+
+In the Gibbs sampler, $Z_n$ is generated from $U_n$ independently of $Z_{n-1}$. Hence, conditional on $U_n$, the variables $Z_{n-1}$ and $Z_n$ are independent. Therefore,
+\[
+\mathbb{E}[Z_{n-1}Z_n \mid U_n]
+=
+Z_{n-1} \, \mathbb{E}[Z_n \mid U_n].
+\]
+
+Since $\mathbb{E}[Z_n \mid U_n] = 0$, we obtain
+\[
+\mathbb{E}[Z_{n-1}Z_n \mid U_n] = 0.
+\]
+
+Taking expectations again,
+\[
+\mathbb{E}[Z_{n-1}Z_n] = 0.
+\]
+
+Thus,
+\[
+\mathrm{Cov}(Z_{n-1}, Z_n) = 0.
+\]
+
+Successive Gibbs samples $Z_{n-1}$ and $Z_n$ are uncorrelated in stationarity. 
+However, they are not independent, since both depend on the intermediate variable $U_n$.
+
+### Correlation between successive second moments $Z_{n-1}^2$ and $Z_n^2$}
+
+Recall that
+\[
+Z_n \mid U_n \sim \mathrm{Unif}\!\big(-a(U_n), a(U_n)\big),
+\qquad
+a(u) = \sqrt{-2\log u}.
+\]
+
+For a symmetric uniform distribution on $(-a,a)$ we have
+\[
+\mathbb{E}[X^2] = \frac{a^2}{3}.
+\]
+
+Therefore,
+\[
+\mathbb{E}[Z_n^2 \mid U_n]
+=
+\frac{a(U_n)^2}{3}
+=
+\frac{-2\log U_n}{3}.
+\]
+
+Unlike the first moment case, this conditional second moment depends explicitly on $U_n$.
+
+\medskip
+
+We now compute the covariance using the law of total covariance:
+\[
+\mathrm{Cov}(Z_{n-1}^2, Z_n^2)
+=
+\mathbb{E}\!\left[
+\mathrm{Cov}(Z_{n-1}^2, Z_n^2 \mid U_n)
+\right]
++
+\mathrm{Cov}\!\left(
+\mathbb{E}[Z_{n-1}^2 \mid U_n],
+\mathbb{E}[Z_n^2 \mid U_n]
+\right).
+\]
+
+In the Gibbs sampler, $Z_n$ is generated from $U_n$ independently of $Z_{n-1}$. Hence, conditional on $U_n$, the variables $Z_{n-1}$ and $Z_n$ are independent, and therefore
+\[
+\mathrm{Cov}(Z_{n-1}^2, Z_n^2 \mid U_n) = 0.
+\]
+
+Thus,
+\[
+\mathrm{Cov}(Z_{n-1}^2, Z_n^2)
+=
+\mathrm{Cov}\!\left(
+\mathbb{E}[Z_{n-1}^2 \mid U_n],
+\mathbb{E}[Z_n^2 \mid U_n]
+\right).
+\]
+
+From the previous calculation,
+\[
+\mathbb{E}[Z_{n-1}^2 \mid U_n]
+=
+\mathbb{E}[Z_n^2 \mid U_n]
+=
+\frac{-2\log U_n}{3}.
+\]
+
+Therefore,
+\[
+\mathrm{Cov}(Z_{n-1}^2, Z_n^2)
+=
+\mathrm{Var}\!\left(\frac{-2\log U_n}{3}\right).
+\]
+
+\medskip
+
+To evaluate this variance, we determine the marginal distribution of $U_n$ in stationarity.  
+It can be shown that
+\[
+T = -2\log U_n \sim \chi^2_3.
+\]
+
+Hence,
+\[
+\mathbb{E}[T] = 3,
+\qquad
+\mathrm{Var}(T) = 6.
+\]
+
+It follows that
+\[
+\mathrm{Cov}(Z_{n-1}^2, Z_n^2)
+=
+\mathrm{Var}(T/3)
+=
+\frac{6}{9}
+=
+\frac{2}{3}.
+\]
+
+Successive second moments are positively correlated:
+\[
+\mathrm{Cov}(Z_{n-1}^2, Z_n^2) = \frac{2}{3} \neq 0.
+\]
+Thus, although successive Gibbs samples $Z_{n-1}$ and $Z_n$ are uncorrelated, their squared values exhibit positive correlation due to the shared dependence on the intermediate variable $U_n$.
