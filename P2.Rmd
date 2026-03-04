@@ -9,6 +9,11 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+#Library imports
+```{r}
+library(glmmTMB)
+```
+
 # Problem 1
 We suppose that the joint density of $U$, $Z$ up to a normalizing constant is 
 \[
@@ -35,7 +40,7 @@ f^{*}_{U,Z}(u,z) =
 0, & \text{elsewhere.}
 \end{cases}
 \]
-As a function of $u$, this is constant on the interval $(0,e^{-x^{\frac{2}{2}}})$. 
+As a function of $u$, this is constant on the interval $(0,e^{-z^2/2}})$. 
 
 The normalizing constant is
 \[
@@ -420,3 +425,180 @@ Successive second moments are positively correlated:
 \mathrm{Cov}(Z_{n-1}^2, Z_n^2) = \frac{2}{3} \neq 0.
 \]
 Thus, although successive Gibbs samples $Z_{n-1}$ and $Z_n$ are uncorrelated, their squared values exhibit positive correlation due to the shared dependence on the intermediate variable $U_n$.
+
+
+# Problem 1
+## a)
+
+```{r}
+load(url("https://www.math.ntnu.no/emner/TMA4300/2026v/random-intercept-data.RData"))
+
+#str(data)
+#head(data)
+```
+
+
+```{r}
+mod <- glmmTMB(y ~ (1|i), data=data)
+summary(mod)
+```
+
+The maximum likelihood estimate of the overall mean is $\hat{\mu} = 10.1888$. The estimated variance of the random intercepts is $\widehat{\mathrm{Var}}(\gamma_i) = 0.2301$, corresponding to $1/\nu$, and the estimated residual variance is $\widehat{\mathrm{Var}}(\epsilon_{ij}) = 0.7560$, corresponding to $1/\tau$. These estimates will later be used to check that the Gibbs sampler implementation produces reasonable results.
+
+## b) Full conditional distributions
+
+From the hierarchical model
+
+\[
+y_{ij} \mid \mu,\gamma_i,\tau \sim N(\mu+\gamma_i,\tau^{-1}),
+\]
+
+\[
+\gamma_i \mid \nu \sim N(0,\nu^{-1}),
+\]
+
+with priors
+
+\[
+\pi(\mu)\propto 1, \qquad \tau \sim \text{Gamma}(\alpha,\alpha), \qquad \nu \sim \text{Gamma}(\alpha,\alpha),
+\]
+
+we derive the following full conditional distributions.
+
+Let \(N=\sum_{i=1}^{m} n_i\).
+
+
+#### Full conditional of \( \mu \)
+
+Combining the likelihood with the flat prior for \(\mu\), we obtain
+
+\[
+\mu \mid \gamma,\tau,y \sim N(\bar{y}_\gamma,(N\tau)^{-1}),
+\]
+
+where
+
+\[
+\bar{y}_\gamma
+=
+\frac{1}{N}
+\sum_{i=1}^{m}\sum_{j=1}^{n_i}(y_{ij}-\gamma_i).
+\]
+
+
+#### Full conditional of \( \gamma_i \)
+
+Using the likelihood contribution from cluster \(i\) together with the prior \(\gamma_i \sim N(0,\nu^{-1})\), we obtain
+
+\[
+\gamma_i \mid \mu,\tau,\nu,y
+\sim
+N(m_i,(\nu+n_i\tau)^{-1}),
+\]
+
+where
+
+\[
+m_i
+=
+\frac{\tau\sum_{j=1}^{n_i}(y_{ij}-\mu)}{\nu+n_i\tau}.
+\]
+
+
+#### Full conditional of \( \tau \)
+
+Let
+
+\[
+S=\sum_{i=1}^{m}\sum_{j=1}^{n_i}(y_{ij}-\mu-\gamma_i)^2.
+\]
+
+Combining the Gaussian likelihood with the prior \(\tau \sim \text{Gamma}(\alpha,\alpha)\) gives
+
+\[
+\tau \mid \mu,\gamma,\nu,y
+\sim
+\text{Gamma}\left(\alpha+\frac{N}{2},\,\alpha+\frac{S}{2}\right).
+\]
+
+
+#### Full conditional of \( \nu \)
+
+Using the prior for \(\gamma_i\) and \(\nu \sim \text{Gamma}(\alpha,\alpha)\), we obtain
+
+\[
+\nu \mid \mu,\gamma,\tau,y
+\sim
+\text{Gamma}\left(\alpha+\frac{m}{2},\,\alpha+\frac{1}{2}\sum_{i=1}^{m}\gamma_i^2\right).
+\]
+
+## c) Implementation of a Gibbs sampler
+
+```{r}
+gibbs_sampler <- function(data, n_iter = 20000, alpha = 0.0001){
+
+y <- data$y
+i <- data$i
+
+groups <- unique(i)
+m <- length(groups)
+N <- length(y)
+
+n_i <- table(i)
+
+mu <- mean(y)
+gamma <- rep(0,m)
+tau <- 1
+nu <- 1
+
+samples <- matrix(NA, n_iter, m+3)
+
+for (iter in 1:n_iter){
+
+# update mu
+y_gamma <- y - gamma[i]
+mu <- rnorm(1, mean(y_gamma), sqrt(1/(N*tau)))
+
+# update gamma_i
+for (k in 1:m){
+
+y_k <- y[i==groups[k]]
+n_k <- length(y_k)
+
+var_gamma <- 1/(nu + n_k*tau)
+mean_gamma <- (tau*sum(y_k-mu))/(nu+n_k*tau)
+
+gamma[k] <- rnorm(1, mean_gamma, sqrt(var_gamma))
+}
+
+# update tau
+res <- y - mu - gamma[i]
+tau <- rgamma(1, alpha + N/2, alpha + sum(res^2)/2)
+
+# update nu
+nu <- rgamma(1, alpha + m/2, alpha + sum(gamma^2)/2)
+
+samples[iter,] <- c(mu, gamma, 1/tau, 1/nu)
+}
+
+return(samples)
+}
+```
+
+```{r}
+samples <- gibbs_sampler(data, 20000)
+colMeans(samples)
+```
+
+The Gibbs sampler was run for $20000$ iterations to sample from the joint posterior distribution of the model parameters. The posterior mean of the global intercept is approximately $\mu \approx 10.19$, which is very close to the maximum likelihood estimate obtained in part (a). The posterior mean of the residual variance is approximately $1/\tau \approx 0.80$ and the posterior mean of the random intercept variance is approximately $1/\nu \approx 0.25$. These values are close to the corresponding maximum likelihood estimates ($0.756$ and $0.2301$), suggesting that the Gibbs sampler produces reasonable estimates and appears to converge to the correct posterior distribution.
+
+## d)
+```{r}
+matplot(samples[,c(1,22,23)], type="l")
+```
+
+The trace plots for the parameters appear stable and fluctuate around constant levels, indicating that the Gibbs sampler mixes reasonably well and that the Markov chains have reached a stationary distribution. The chain for the global intercept μ is centered around approximately $10.2$, while the residual variance $1/τ$ fluctuates around about $0.8$ and the random intercept variance $1/ν$ around about $0.25$. These values are consistent with the maximum likelihood estimates obtained in part (a). The trace plot for $1/ν$ shows slightly larger variability and occasional spikes compared to the other parameters, which is expected for variance parameters with weakly informative priors, but overall the chain still appears stable.
+
+
+
+
