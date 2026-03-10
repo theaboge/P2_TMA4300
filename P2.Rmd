@@ -40,7 +40,7 @@ f^{*}_{U,Z}(u,z) =
 0, & \text{elsewhere.}
 \end{cases}
 \]
-As a function of $u$, this is constant on the interval $(0,e^{-z^2/2}})$. 
+As a function of $u$, this is constant on the interval $(0,e^{-z^2/2})$. 
 
 The normalizing constant is
 \[
@@ -427,7 +427,7 @@ Successive second moments are positively correlated:
 Thus, although successive Gibbs samples $Z_{n-1}$ and $Z_n$ are uncorrelated, their squared values exhibit positive correlation due to the shared dependence on the intermediate variable $U_n$.
 
 
-# Problem 1
+# Problem 2
 ## a)
 
 ```{r}
@@ -597,7 +597,7 @@ The Gibbs sampler was run for $20000$ iterations to sample from the joint poster
 matplot(samples[,c(1,22,23)], type="l")
 ```
 
-The trace plots for the parameters appear stable and fluctuate around constant levels, indicating that the Gibbs sampler mixes reasonably well and that the Markov chains have reached a stationary distribution. The chain for the global intercept μ is centered around approximately $10.2$, while the residual variance $1/τ$ fluctuates around about $0.8$ and the random intercept variance $1/ν$ around about $0.25$. These values are consistent with the maximum likelihood estimates obtained in part (a). The trace plot for $1/ν$ shows slightly larger variability and occasional spikes compared to the other parameters, which is expected for variance parameters with weakly informative priors, but overall the chain still appears stable.
+The trace plots for the parameters appear stable and fluctuate around constant levels, indicating that the Gibbs sampler mixes reasonably well and that the Markov chains have reached a stationary distribution. The chain for the global intercept $\mu$ is centered around approximately $10.2$, while the residual variance $1/\tau$ fluctuates around about $0.8$ and the random intercept variance $1/ \nu$ around about $0.25$. These values are consistent with the maximum likelihood estimates obtained in part (a). The trace plot for $1/ \nu$ shows slightly larger variability and occasional spikes compared to the other parameters, which is expected for variance parameters with weakly informative priors, but overall the chain still appears stable.
 
 
 
