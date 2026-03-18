@@ -3,14 +3,17 @@ title: "Project 2 – TMA4300"
 author: "Karine Grande & Thea Boge"
 date: "2026-03-02"
 output: pdf_document
+header-includes:
+   - \usepackage{float}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
 ---
 
-```{r setup, include=FALSE}
+```{r setup, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-#Library imports
-```{r}
+```{r, echo=FALSE}
 library(glmmTMB)
 ```
 
@@ -131,7 +134,7 @@ iterate for \( t = 1, \dots, n \):
 
 This iterative scheme defines a Markov chain whose stationary distribution is the joint density \( f_{U,Z}(u,z) \).The marginal stationary distribution of \( Z \) is \( \mathcal{N}(0,1) \).
 
-```{r}
+```{r gibbs_sampler, echo=FALSE}
 gibbs_normal <- function(n, u_init = 0.5, z_init = 0) {
   
   U <- numeric(n)
@@ -156,7 +159,7 @@ gibbs_normal <- function(n, u_init = 0.5, z_init = 0) {
 }
 ```
 
-```{r}
+```{r 2, echo=FALSE}
 # Run Gibbs sampler
 set.seed(123)
 Z <- gibbs_normal(10000)
@@ -322,7 +325,7 @@ Thus,
 Successive Gibbs samples $Z_{n-1}$ and $Z_n$ are uncorrelated in stationarity. 
 However, they are not independent, since both depend on the intermediate variable $U_n$.
 
-### Correlation between successive second moments $Z_{n-1}^2$ and $Z_n^2$}
+### Correlation between successive second moments $Z_{n-1}^2$ and $Z_n^2$
 
 Recall that
 \[
@@ -430,7 +433,7 @@ Thus, although successive Gibbs samples $Z_{n-1}$ and $Z_n$ are uncorrelated, th
 # Problem 2
 ## a)
 
-```{r}
+```{r 3, echo=FALSE}
 load(url("https://www.math.ntnu.no/emner/TMA4300/2026v/random-intercept-data.RData"))
 
 #str(data)
@@ -438,7 +441,7 @@ load(url("https://www.math.ntnu.no/emner/TMA4300/2026v/random-intercept-data.RDa
 ```
 
 
-```{r}
+```{r 4, echo=FALSE}
 mod <- glmmTMB(y ~ (1|i), data=data)
 summary(mod)
 ```
@@ -534,7 +537,7 @@ Using the prior for \(\gamma_i\) and \(\nu \sim \text{Gamma}(\alpha,\alpha)\), w
 
 ## c) Implementation of a Gibbs sampler
 
-```{r}
+```{r 5, echo=FALSE}
 gibbs_sampler <- function(data, n_iter = 20000, alpha = 0.0001){
 
 y <- data$y
@@ -585,7 +588,7 @@ return(samples)
 }
 ```
 
-```{r}
+```{r 6, echo=FALSE}
 samples <- gibbs_sampler(data, 20000)
 colMeans(samples)
 ```
@@ -593,12 +596,308 @@ colMeans(samples)
 The Gibbs sampler was run for $20000$ iterations to sample from the joint posterior distribution of the model parameters. The posterior mean of the global intercept is approximately $\mu \approx 10.19$, which is very close to the maximum likelihood estimate obtained in part (a). The posterior mean of the residual variance is approximately $1/\tau \approx 0.80$ and the posterior mean of the random intercept variance is approximately $1/\nu \approx 0.25$. These values are close to the corresponding maximum likelihood estimates ($0.756$ and $0.2301$), suggesting that the Gibbs sampler produces reasonable estimates and appears to converge to the correct posterior distribution.
 
 ## d)
-```{r}
+```{r 7, echo=FALSE}
 matplot(samples[,c(1,22,23)], type="l")
 ```
 
 The trace plots for the parameters appear stable and fluctuate around constant levels, indicating that the Gibbs sampler mixes reasonably well and that the Markov chains have reached a stationary distribution. The chain for the global intercept $\mu$ is centered around approximately $10.2$, while the residual variance $1/\tau$ fluctuates around about $0.8$ and the random intercept variance $1/ \nu$ around about $0.25$. These values are consistent with the maximum likelihood estimates obtained in part (a). The trace plot for $1/ \nu$ shows slightly larger variability and occasional spikes compared to the other parameters, which is expected for variance parameters with weakly informative priors, but overall the chain still appears stable.
 
+\section*{Problem 4}
 
+We consider the state equation
+\begin{equation}
+u_t = u_{t-1} + r \left(1 - \left(\frac{e^{u_{t-1}}}{K}\right)^\theta \right) + e_t,
+\qquad e_t \sim \mathcal{N}(0,\sigma),
+\end{equation}
+and the observation equation
+\begin{equation}
+y_t \mid u_t \sim \text{Poisson}(c e^{u_t}).
+\end{equation}
+
+## a)
+
+To show that the model is non-identifiable, it suffices to demonstrate that different parameter values yield the same distribution for the observations $y = (y_1,\dots,y_n)$.
+
+Let $a \in \mathbb{R}$ and define
+\[
+u_t^* = u_t + a, 
+\qquad K^* = K e^a, 
+\qquad c^* = c e^{-a},
+\]
+with
+\[
+r^* = r, \qquad \theta^* = \theta, \qquad \sigma^* = \sigma.
+\]
+
+Then
+\[
+\frac{e^{u_{t-1}^*}}{K^*}
+= \frac{e^{u_{t-1}+a}}{K e^a}
+= \frac{e^{u_{t-1}}}{K},
+\]
+so the state equation remains unchanged:
+\[
+u_t^* = u_{t-1}^* + r \left(1 - \left(\frac{e^{u_{t-1}^*}}{K^*}\right)^\theta \right) + e_t.
+\]
+
+For the observation model,
+\[
+c^* e^{u_t^*} = (c e^{-a}) e^{u_t + a} = c e^{u_t},
+\]
+so the conditional distribution of \(y_t\) is unchanged.
+
+Since \(u_1\) has an improper uniform distribution on \(\mathbb{R}\), it is invariant under shifts. Hence, the transformation
+\[
+(u_t, K, c) \mapsto (u_t + a, K e^a, c e^{-a})
+\]
+leaves the likelihood unchanged, and the model is non-identifiable.
+
+\paragraph{Identifiability.}
+The non-identifiability arises from a shift invariance in \(u_t\). The quantity
+\[
+\log K + \log c
+\]
+is invariant under the transformation, implying that only the product \(cK\) is identifiable. To remove this invariance, we impose the constraint
+\[
+c = 1,
+\]
+which yields an identifiable model without altering its structure.
+
+## b)
+
+To resolve the non-identifiability shown in part (a), we fix \(c = 1\). The parameters \(r, K, \theta, \sigma\) are estimated, with \(K\), \(\theta\), and \(\sigma\) optimized on the log-scale to enforce positivity.
+
+We write the negative joint log-likelihood as
+\[
+-\log f(y,u \mid \theta)
+= -\sum_{t=1}^n \log p(y_t \mid u_t)
+  - \sum_{t=2}^n \log p(u_t \mid u_{t-1}),
+\]
+where
+
+\paragraph{Observation model}
+\[
+y_t \mid u_t \sim \text{Poisson}(e^{u_t}),
+\]
+so
+\[
+-\log p(y_t \mid u_t)
+= e^{u_t} - y_t u_t + \log(y_t!).
+\]
+
+\paragraph{State model}
+\[
+u_t \mid u_{t-1} \sim \mathcal{N}(\mu_t, \sigma^2),
+\quad
+\mu_t = u_{t-1} + r\left(1 - \left(\frac{e^{u_{t-1}}}{K}\right)^\theta\right),
+\]
+giving
+\[
+-\log p(u_t \mid u_{t-1})
+=
+\frac{(u_t - \mu_t)^2}{2\sigma^2} + \log \sigma + \text{const}.
+\]
+
+The latent states \(u = (u_1,\dots,u_n)\) are treated as random effects in \texttt{RTMB}. The marginal likelihood is approximated using the Laplace approximation via \texttt{MakeADFun} with \texttt{random = "u"}. Parameters \(K\), \(\theta\), and \(\sigma\) are optimized on the log-scale to enforce positivity, and \(c=1\) is fixed to ensure identifiability.
+
+```{r model-fit, echo=FALSE}
+library(RTMB)
+
+# Load data
+load(url("https://www.math.ntnu.no/emner/TMA4300/2026v/theta-logistic.RData"))
+
+# Negative joint log-likelihood
+f <- function(parms) {
+  # Extract parameters and transform to enforce positivity
+  r     <- exp(parms$log_r)
+  K     <- exp(parms$log_K)
+  theta <- exp(parms$log_theta)
+  sigma <- exp(parms$log_sigma)
+  
+  # Latent states treated as random effects
+  u <- parms$u
+  n <- length(y)
+  
+  nll <- 0
+  
+  # State equation contribution
+  # Since u_1 has an improper uniform prior, the likelihood starts at t = 2
+  for (t in 2:n) {
+    mu_u <- u[t - 1] + r * (1 - (exp(u[t - 1]) / K)^theta)
+    nll <- nll - dnorm(u[t], mean = mu_u, sd = sigma, log = TRUE)
+  }
+  
+  # Observation equation contribution
+  # For identifiability we fix c = 1, so y_t | u_t ~ Poisson(exp(u_t))
+  for (t in 1:n) {
+    lambda <- exp(u[t])
+    nll <- nll - dpois(y[t], lambda = lambda, log = TRUE)
+  }
+  
+  # Report parameters on the original scale
+  ADREPORT(r)
+  ADREPORT(K)
+  ADREPORT(theta)
+  ADREPORT(sigma)
+  
+  nll
+}
+
+# Initial parameter values
+parameters <- list(
+  log_r = 0,
+  log_K = log(mean(y)),
+  log_theta = 0,
+  log_sigma = -1,
+  u = log(y + 1)
+)
+
+# Construct objective function with Laplace approximation over u
+obj <- MakeADFun(f, parameters, random = "u")
+```
+
+### c)
+
+The marginal likelihood was maximized using the \texttt{nlminb} optimizer. The optimisation converged successfully, with a small gradient norm at the optimum, indicating a stable solution.
+
+```{r, echo=FALSE, results = 'hide', message=FALSE, warning=FALSE}
+opt <- nlminb(obj$par, obj$fn, obj$gr)
+sdr <- sdreport(obj)
+
+u_ests <- summary(sdr, "random")[, 1]
+u_ses  <- summary(sdr, "random")[, 2]
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.pos="H"}
+par(mfrow = c(2, 1), mar = c(4, 4, 2, 1))
+
+plot(u_ests, type = "l", col = "blue", lwd = 2, 
+     main = "Estimated Log-Density (u_t)", ylab = "u_t", xlab = "Time")
+lines(u_ests + 1.96 * u_ses, col = "blue", lty = 2)
+lines(u_ests - 1.96 * u_ses, col = "blue", lty = 2)
+
+plot(y, type = "p", pch = 16, col = "gray", 
+     main = "Observed y_t and estimated exp(u_t)", ylab = "Counts", xlab = "Time")
+lines(exp(u_ests), col = "red", lwd = 2)
+legend("topright", legend = c("Observed y_t", "exp(u_t)"), 
+       col = c("gray", "red"), pch = c(16, NA), lty = c(NA, 1))
+```
+
+The estimated latent states correspond to the conditional modes obtained from the Laplace approximation. Since \(c=1\), the observation mean is \(E[y_t \mid u_t] = e^{u_t}\). The fitted trajectory captures the overall trend of the data while smoothing out the Poisson noise, reflecting the underlying process dynamics.
+
+
+### d)
+
+To evaluate the performance of the method, we simulated a dataset of \(n=200\) observations using known parameter values and fitted the model to the simulated data.
+
+```{r, echo=FALSE, results = 'hide', message=FALSE, warning=FALSE}
+simulate_theta_logistic <- function(n, r, K, theta, sigma, c = 1, u1 = 0) {
+  u <- numeric(n)
+  y <- numeric(n)
+  u[1] <- u1
+  
+  for (t in 2:n) {
+    eps <- rnorm(1, 0, sigma)
+    u[t] <- u[t-1] + r * (1 - (exp(u[t-1])/K)^theta) + eps
+  }
+  
+  y <- rpois(n, c * exp(u))
+  
+  list(u = u, y = y)
+}
+
+# Simulate data
+set.seed(123)
+true_pars <- list(r = 0.1, K = 45, theta = 2.0, sigma = 0.3)
+
+sim_data <- simulate_theta_logistic(
+  n = 200,
+  r = true_pars$r,
+  K = true_pars$K,
+  theta = true_pars$theta,
+  sigma = true_pars$sigma
+)
+
+# Replace data
+y <- sim_data$y
+
+# Define parameters based on simulated data
+parameters_sim <- list(
+  log_r = 0,
+  log_K = log(mean(y)),
+  log_theta = 0,
+  log_sigma = -1,
+  u = log(y + 1)
+)
+
+# Fit model
+obj_sim <- MakeADFun(f, parameters_sim, random = "u")
+opt_sim <- nlminb(obj_sim$par, obj_sim$fn, obj_sim$gr)
+sdr_sim <- sdreport(obj_sim)
+
+summary_sim <- summary(sdr_sim, "report")
+print(summary_sim)
+
+```
+
+### Results
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+library(kableExtra)
+
+estimates <- summary_sim[, "Estimate"]
+ses       <- summary_sim[, "Std. Error"]
+param_names <- rownames(summary_sim)
+
+true_vals <- c(r = 0.1, K = 45, theta = 2.0, sigma = 0.3)
+
+lower <- estimates - 1.96 * ses
+upper <- estimates + 1.96 * ses
+
+ci_table <- data.frame(
+  Parameter = c("$r$", "$K$", "$\\theta$", "$\\sigma$"),
+  "True value" = true_vals[param_names],
+  Estimate = round(estimates, 4),
+  "Std. error" = round(ses, 4),
+  "95 % CI" = paste0("[", round(lower, 3), ", ", round(upper, 3), "]")
+)
+
+colnames(ci_table) <- c(
+  "Parameter",
+  "True value",
+  "Estimate",
+  "Std. error",
+  "95\\% CI"
+)
+
+kable(ci_table,
+      format = "latex",
+      booktabs = TRUE,
+      escape = FALSE,
+      caption = "Comparison of true parameter values and estimates based on simulated data.") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+The parameter estimates are close to the true values, and all true parameters lie within the corresponding 95\% confidence intervals. This indicates that the estimation procedure performs well and that the Laplace approximation provides reliable inference for this model.
+
+The parameter $\theta$ exhibits the largest uncertainty, reflected in a relatively wide confidence interval. This is expected, as $\theta$ governs the nonlinear density dependence and enters the model in a highly nonlinear manner, making it more difficult to estimate from finite data. In contrast, $\sigma$ is estimated with high precision, indicating that the noise level is well identified. The parameters $r$ and $K$ are also reasonably well estimated, suggesting that the overall growth dynamics are captured effectively.
+
+The results are based on a single simulated dataset, and the estimation performance may vary across different realizations. In addition, the Laplace approximation relies on a Gaussian approximation of the latent posterior distribution, which may be less accurate in highly nonlinear settings or for small sample sizes. Nevertheless, the results suggest that the approximation performs well in this setting.
+
+Fixing $c = 1$ was essential to ensure identifiability. Without this constraint, the model exhibits a shift invariance in the latent states, making it impossible to uniquely determine the parameters. Imposing this constraint leads to a well-defined estimation problem and stable numerical optimization.
+
+\textbf{Standard errors}
+
+The standard errors reported by \texttt{sdreport} are based on asymptotic likelihood theory. The covariance matrix is approximated by the inverse Hessian of the Laplace-approximated marginal negative log-likelihood,
+\[
+H(\hat{\theta})^{-1}.
+\]
+Since parameters are optimized on the log-scale, the Delta method is used to obtain standard errors on the original scale:
+\[
+\mathrm{Var}(g(\theta)) \approx \nabla g(\theta)^T H(\theta)^{-1} \nabla g(\theta).
+\]
+
+Overall, the standard errors appear to be of a reasonable magnitude, and the agreement between estimated and true parameter values provides empirical support for the reliability of the Laplace approximation in this model.
 
 
