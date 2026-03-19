@@ -15,6 +15,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, echo=FALSE}
 library(glmmTMB)
+library(coda)    
+library(RTMB)
+library(kableExtra)
 ```
 
 # Problem 1
@@ -433,7 +436,7 @@ Thus, although successive Gibbs samples $Z_{n-1}$ and $Z_n$ are uncorrelated, th
 # Problem 2
 ## a)
 
-```{r 3, echo=FALSE}
+```{r}
 load(url("https://www.math.ntnu.no/emner/TMA4300/2026v/random-intercept-data.RData"))
 
 #str(data)
@@ -441,7 +444,7 @@ load(url("https://www.math.ntnu.no/emner/TMA4300/2026v/random-intercept-data.RDa
 ```
 
 
-```{r 4, echo=FALSE}
+```{r}
 mod <- glmmTMB(y ~ (1|i), data=data)
 summary(mod)
 ```
@@ -537,70 +540,414 @@ Using the prior for \(\gamma_i\) and \(\nu \sim \text{Gamma}(\alpha,\alpha)\), w
 
 ## c) Implementation of a Gibbs sampler
 
-```{r 5, echo=FALSE}
+```{r}
+
 gibbs_sampler <- function(data, n_iter = 20000, alpha = 0.0001){
 
-y <- data$y
-i <- data$i
+  y <- data$y
+  i <- as.numeric(factor(data$i))   # ensure indices 1,...,m
 
-groups <- unique(i)
-m <- length(groups)
-N <- length(y)
+  m <- length(unique(i))
+  N <- length(y)
 
-n_i <- table(i)
+  # group sizes
+  n_i <- table(i)
 
-mu <- mean(y)
-gamma <- rep(0,m)
-tau <- 1
-nu <- 1
+  # initial values
+  mu <- mean(y)
+  gamma <- rep(0, m)
+  tau <- 1
+  nu <- 1
 
-samples <- matrix(NA, n_iter, m+3)
+  # storage
+  samples <- matrix(NA, n_iter, m + 3)
 
-for (iter in 1:n_iter){
+  for (iter in 1:n_iter){
 
-# update mu
-y_gamma <- y - gamma[i]
-mu <- rnorm(1, mean(y_gamma), sqrt(1/(N*tau)))
+    # --- update mu ---
+    y_gamma <- y - gamma[i]
+    mu <- rnorm(1, mean(y_gamma), sqrt(1/(N * tau)))
 
-# update gamma_i
-for (k in 1:m){
+    # --- update gamma_i ---
+    for (k in 1:m){
 
-y_k <- y[i==groups[k]]
-n_k <- length(y_k)
+      y_k <- y[i == k]
+      n_k <- length(y_k)
 
-var_gamma <- 1/(nu + n_k*tau)
-mean_gamma <- (tau*sum(y_k-mu))/(nu+n_k*tau)
+      var_gamma <- 1 / (nu + n_k * tau)
+      mean_gamma <- (tau * sum(y_k - mu)) / (nu + n_k * tau)
 
-gamma[k] <- rnorm(1, mean_gamma, sqrt(var_gamma))
-}
+      gamma[k] <- rnorm(1, mean_gamma, sqrt(var_gamma))
+    }
 
-# update tau
-res <- y - mu - gamma[i]
-tau <- rgamma(1, alpha + N/2, alpha + sum(res^2)/2)
+    # --- update tau ---
+    res <- y - mu - gamma[i]
+    tau <- rgamma(1, alpha + N/2, alpha + sum(res^2)/2)
 
-# update nu
-nu <- rgamma(1, alpha + m/2, alpha + sum(gamma^2)/2)
+    # --- update nu ---
+    nu <- rgamma(1, alpha + m/2, alpha + sum(gamma^2)/2)
 
-samples[iter,] <- c(mu, gamma, 1/tau, 1/nu)
-}
+    # store variances instead of precisions
+    samples[iter, ] <- c(mu, gamma, 1/tau, 1/nu)
+  }
 
-return(samples)
+  # column names
+  colnames(samples) <- c(
+    "mu",
+    paste0("gamma_", 1:m),
+    "sigma2_eps",
+    "sigma2_gamma"
+  )
+
+  # return as mcmc object
+  samples <- mcmc(samples)
+
+  return(samples)
 }
 ```
 
-```{r 6, echo=FALSE}
+```{r}
 samples <- gibbs_sampler(data, 20000)
 colMeans(samples)
 ```
 
-The Gibbs sampler was run for $20000$ iterations to sample from the joint posterior distribution of the model parameters. The posterior mean of the global intercept is approximately $\mu \approx 10.19$, which is very close to the maximum likelihood estimate obtained in part (a). The posterior mean of the residual variance is approximately $1/\tau \approx 0.80$ and the posterior mean of the random intercept variance is approximately $1/\nu \approx 0.25$. These values are close to the corresponding maximum likelihood estimates ($0.756$ and $0.2301$), suggesting that the Gibbs sampler produces reasonable estimates and appears to converge to the correct posterior distribution.
+The Gibbs sampler was run for 20000 iterations to sample from the joint posterior distribution of the model parameters. The posterior mean of the global intercept is approximately $\mu \approx 10.19$, which is very close to the maximum likelihood estimate obtained in part (a). The posterior mean of the residual variance is approximately $1/\tau \approx 0.80$, and the posterior mean of the random intercept variance is approximately $1/\nu \approx 0.25$. These values are close to the corresponding maximum likelihood estimates from part (a), namely $0.756$ and $0.2301$. This suggests that the Gibbs sampler is producing reasonable posterior estimates and that the implementation appears to be correct.
+
 
 ## d)
-```{r 7, echo=FALSE}
-matplot(samples[,c(1,22,23)], type="l")
+```{r}
+par(mfrow = c(3,1))
+plot(samples[,1], type = "l", main = expression(mu), ylab = expression(mu), xlab = "Iteration")
+plot(samples[,22], type = "l", main = expression(1/tau), ylab = expression(1/tau), xlab = "Iteration")
+plot(samples[,23], type = "l", main = expression(1/nu), ylab = expression(1/nu), xlab = "Iteration")
+plot(log(samples[,23]), type = "l", main = expression(log(1/nu)),
+     ylab = expression(log(1/nu)), xlab = "Iteration")
+```
+The trace plots show that the Markov chains fluctuate around stable levels with no visible trends, suggesting that the Gibbs sampler mixes reasonably well. The posterior mean of the global intercept $\mu$ is around 10.2, which is very close to the maximum likelihood estimate obtained in part (a). The trace plot for $\mu$ shows tight fluctuations around this level and the posterior density appears approximately normal.
+
+The residual variance $1/\tau$ fluctuates around approximately 0.8 and also appears stable across iterations. Its posterior distribution is slightly right-skewed, which is typical for variance parameters.
+
+The random intercept variance $1/\nu$ behaves somewhat differently. Its trace plot shows larger variability and occasional spikes toward larger values. The posterior density is strongly right-skewed, with most of its mass concentrated near small values. This indicates that there is greater uncertainty in the random intercept variance than in the residual variance.
+
+Examining the trace plot of $\log(1/\nu)$ helps visualize this behavior more clearly. On the log scale the chain appears more regular, while still showing occasional excursions corresponding to large values of $1/\nu$. Overall, the trace plots suggest that the Gibbs sampler mixes reasonably well, although the random intercept variance is clearly the most variable parameter in the model.
+
+## e)
+From (6) we can rewrite
+\[
+p=\frac{\nu^{-1}}{\nu^{-1}+\tau^{-1}}
+=\frac{\tau}{\tau+\nu}.
+\]
+Under the prior in (4), the precision parameters are independent with
+\[
+\tau \sim \Gamma(\alpha,\alpha), \qquad \nu \sim \Gamma(\alpha,\alpha).
+\]
+A standard result for independent Gamma variables with common rate parameter states that if
+\[
+X \sim \Gamma(a,\lambda), \qquad Y \sim \Gamma(b,\lambda),
+\]
+then
+\[
+\frac{X}{X+Y} \sim \mathrm{Beta}(a,b).
+\]
+Applying this with \(X=\tau\) and \(Y=\nu\), we obtain
+\[
+p=\frac{\tau}{\tau+\nu} \sim \mathrm{Beta}(\alpha,\alpha).
+\]
+Hence, with \(\alpha=0.0001\), the implied prior distribution is
+\[
+p \sim \mathrm{Beta}(0.0001,0.0001).
+\]
+
+This prior is strongly U-shaped, with most of its mass concentrated near 0 and 1. Thus it expresses a prior belief that the random intercept explains either almost none or almost all of the total variance. In a typical applied setting, this would usually not represent a very reasonable prior belief about \(p\).
+
+```{r}
+p_post <- samples[,23] / (samples[,23] + samples[,22])
+
+curve(dbeta(x, 0.0001, 0.0001), from = 0, to = 1,
+      main = "Prior and posterior of p",
+      xlab = "p", ylab = "Density", lwd = 2)
+
+lines(density(p_post), lwd = 2, lty = 2)
+legend("top", legend = c("Prior", "Posterior"),
+       lwd = 2, lty = c(1,2))
+```
+From part (4) we have independent priors
+\[
+\tau \sim \Gamma(\alpha,\alpha), \qquad \nu \sim \Gamma(\alpha,\alpha).
+\]
+Using the definition
+\[
+p=\frac{\nu^{-1}}{\nu^{-1}+\tau^{-1}}
+=\frac{\tau}{\tau+\nu},
+\]
+and the standard result that if
+\[
+X \sim \Gamma(a,\lambda), \quad Y \sim \Gamma(b,\lambda),
+\]
+independently, then
+\[
+\frac{X}{X+Y} \sim \mathrm{Beta}(a,b),
+\]
+it follows that
+\[
+p \sim \mathrm{Beta}(\alpha,\alpha).
+\]
+
+With \(\alpha = 0.0001\), the prior for \(p\) is therefore
+\[
+p \sim \mathrm{Beta}(0.0001,0.0001).
+\]
+
+This prior distribution is strongly U-shaped and places most of its mass near 0 and 1. Hence it expresses the belief that the random intercept explains either almost none or almost all of the total variance. 
+
+The posterior distribution obtained from the Gibbs sampler is concentrated around values near \(p \approx 0.7\), indicating that the data suggest a substantial but not dominant contribution of the random intercept to the total variance. The posterior is much more concentrated than the prior and lies far from the extreme values favored by the prior.
+
+Therefore, the prior implied by (4) does not appear to represent a very reasonable prior belief about \(p\) in a typical applied setting.
+
+## f)
+```{r}
+samples_f <- gibbs_sampler(data, n_iter = 20000, alpha = 0)
+
+par(mfrow = c(2,2))
+plot(samples_f[,1], type = "l", main = expression(mu), ylab = expression(mu), xlab = "Iteration")
+plot(samples_f[,22], type = "l", main = expression(1/tau), ylab = expression(1/tau), xlab = "Iteration")
+plot(samples_f[,23], type = "l", main = expression(1/nu), ylab = expression(1/nu), xlab = "Iteration")
+plot(log(samples_f[,23]), type = "l", main = expression(log(1/nu)),
+     ylab = expression(log(1/nu)), xlab = "Iteration")
 ```
 
-The trace plots for the parameters appear stable and fluctuate around constant levels, indicating that the Gibbs sampler mixes reasonably well and that the Markov chains have reached a stationary distribution. The chain for the global intercept $\mu$ is centered around approximately $10.2$, while the residual variance $1/\tau$ fluctuates around about $0.8$ and the random intercept variance $1/ \nu$ around about $0.25$. These values are consistent with the maximum likelihood estimates obtained in part (a). The trace plot for $1/ \nu$ shows slightly larger variability and occasional spikes compared to the other parameters, which is expected for variance parameters with weakly informative priors, but overall the chain still appears stable.
+In the limiting case \( \alpha \to 0 \), the Gamma priors in (4) become the improper scale priors
+\[
+\pi(\tau)\propto\frac{1}{\tau}, \qquad \pi(\nu)\propto\frac{1}{\nu}.
+\]
+
+Running the Gibbs sampler with \( \alpha = 0 \), the chains for the global intercept \( \mu \) and the residual variance \(1/\tau\) remain stable and well-behaved. Their trace plots fluctuate around constant levels and their posterior distributions appear similar to those obtained in part (d).
+
+The behavior of the random intercept variance \(1/\nu\) is quite different. The trace plot shows much larger variability with occasional large spikes. The posterior density is strongly right-skewed, indicating that very large values of the variance component occur with non-negligible probability.
+
+Examining the trace plot of \( \log(1/\nu) \) further highlights this behavior, showing large excursions corresponding to extreme values of the random intercept variance. This suggests that the posterior for \( \nu \) is weakly constrained under the improper prior \( \pi(\nu)\propto1/\nu \).
+
+Although the full conditional distributions remain proper, this behavior indicates that the joint posterior may be close to improper or poorly behaved for this choice of prior. The variance component is therefore much less stable under the improper scale prior than under the Gamma prior used in part (d).
+
+## g)
+Define
+\[
+\sigma^2=\nu^{-1}+\tau^{-1},
+\qquad
+p=\frac{\nu^{-1}}{\nu^{-1}+\tau^{-1}}.
+\]
+Then
+\[
+\nu^{-1}=p\sigma^2,\qquad \tau^{-1}=(1-p)\sigma^2,
+\]
+so that
+\[
+\nu=\frac{1}{p\sigma^2},\qquad \tau=\frac{1}{(1-p)\sigma^2}.
+\]
+
+To derive the implied prior on \((\nu,\tau)\), it is convenient to write
+\[
+\sigma^2=\frac{1}{\nu}+\frac{1}{\tau}=\frac{\nu+\tau}{\nu\tau},
+\qquad
+p=\frac{\nu^{-1}}{\nu^{-1}+\tau^{-1}}=\frac{\tau}{\nu+\tau}.
+\]
+The Jacobian of the transformation \((\nu,\tau)\mapsto (\sigma^2,p)\) is
+\[
+\frac{\partial(\sigma^2,p)}{\partial(\nu,\tau)}
+=
+\begin{pmatrix}
+-\nu^{-2} & -\tau^{-2}\\[4pt]
+-\dfrac{\tau}{(\nu+\tau)^2} & \dfrac{\nu}{(\nu+\tau)^2}
+\end{pmatrix},
+\]
+with determinant
+\[
+\left|\frac{\partial(\sigma^2,p)}{\partial(\nu,\tau)}\right|
+=
+\frac{1}{\nu\tau(\nu+\tau)}.
+\]
+
+Since the prior in (7a) is
+\[
+\pi(\sigma^2,p)\propto \frac{1}{\sigma^2}I(0<p<1)I(\sigma^2>0),
+\]
+and
+\[
+\frac{1}{\sigma^2}=\frac{\nu\tau}{\nu+\tau},
+\]
+it follows by change of variables that
+\[
+\pi(\nu,\tau)
+\propto
+\frac{\nu\tau}{\nu+\tau}\cdot \frac{1}{\nu\tau(\nu+\tau)}
+=
+\frac{1}{(\nu+\tau)^2},
+\]
+for \(\nu>0\) and \(\tau>0\). Hence
+\[
+\pi(\nu,\tau)\propto \frac{1}{(\nu+\tau)^2}I(\nu>0)I(\tau>0).
+\]
+
+Next, fixing \(\nu\), the conditional prior density of \(\tau\) is
+\[
+\pi(\tau\mid \nu)\propto \frac{1}{(\nu+\tau)^2}, \qquad \tau>0.
+\]
+Let \(x=\ln\tau\), so that \(\tau=e^x\) and \(d\tau/dx=e^x\). Then
+\[
+\pi(x\mid \nu)\propto \frac{e^x}{(\nu+e^x)^2}
+= \frac{e^{x-\ln\nu}}{(1+e^{x-\ln\nu})^2}.
+\]
+This is the density of a logistic distribution with location parameter \(\ln\nu\) and scale 1. Therefore,
+\[
+\ln\tau\mid \ln\nu \sim \text{Logistic}(\ln\nu,1).
+\]¨
+
+## h)
+
+```{r}
+gibbs_sampler_prior7 <- function(data, n_iter = 20000,
+                                 mu_init = NULL, gamma_init = NULL,
+                                 tau_init = 1, nu_init = 1) {
+
+  y <- data$y
+  i <- as.numeric(factor(data$i))
+
+  m <- length(unique(i))
+  N <- length(y)
+
+  mu <- if (is.null(mu_init)) mean(y) else mu_init
+  gamma <- if (is.null(gamma_init)) rep(0, m) else gamma_init
+  tau <- tau_init
+  nu <- nu_init
+
+  samples <- matrix(NA, n_iter, m + 3)
+  colnames(samples) <- c("mu", paste0("gamma_", 1:m), "sigma2_eps", "sigma2_gamma")
+
+  accept_tau <- 0
+  accept_nu <- 0
+
+  for (iter in 1:n_iter) {
+
+    # update mu
+    y_gamma <- y - gamma[i]
+    mu <- rnorm(1, mean(y_gamma), sqrt(1 / (N * tau)))
+
+    # update gamma_i
+    for (k in 1:m) {
+      y_k <- y[i == k]
+      n_k <- length(y_k)
+
+      var_gamma <- 1 / (nu + n_k * tau)
+      mean_gamma <- (tau * sum(y_k - mu)) / (nu + n_k * tau)
+
+      gamma[k] <- rnorm(1, mean_gamma, sqrt(var_gamma))
+    }
+
+    # ----- MH update for tau -----
+    sse <- sum((y - mu - gamma[i])^2)
+
+    # proposal from Gamma(N/2, sse/2)
+    tau_prop <- rgamma(1, shape = N / 2, rate = sse / 2)
+
+    log_acc_tau <- log(tau_prop) - 2 * log(nu + tau_prop) -
+                   log(tau) + 2 * log(nu + tau)
+
+    if (log(runif(1)) < log_acc_tau) {
+      tau <- tau_prop
+      accept_tau <- accept_tau + 1
+    }
+
+    # ----- MH update for nu -----
+    ss_gamma <- sum(gamma^2)
+
+    # proposal from Gamma(m/2, sum(gamma^2)/2)
+    nu_prop <- rgamma(1, shape = m / 2, rate = ss_gamma / 2)
+
+    log_acc_nu <- log(nu_prop) - 2 * log(nu_prop + tau) -
+                  log(nu) + 2 * log(nu + tau)
+
+    if (log(runif(1)) < log_acc_nu) {
+      nu <- nu_prop
+      accept_nu <- accept_nu + 1
+    }
+
+    # store variances
+    samples[iter, ] <- c(mu, gamma, 1 / tau, 1 / nu)
+  }
+
+  list(
+    samples = samples,
+    accept_tau = accept_tau / n_iter,
+    accept_nu = accept_nu / n_iter
+  )
+}
+```
+
+
+```{r}
+out_h <- gibbs_sampler_prior7(data, 20000)
+
+samples_h <- out_h$samples
+out_h$accept_tau
+out_h$accept_nu
+```
+
+```{r}
+par(mfrow = c(2,2))
+plot(samples_h[,1], type = "l", main = expression(mu), ylab = expression(mu), xlab = "Iteration")
+plot(samples_h[,22], type = "l", main = expression(1/tau), ylab = expression(1/tau), xlab = "Iteration")
+plot(samples_h[,23], type = "l", main = expression(1/nu), ylab = expression(1/nu), xlab = "Iteration")
+plot(log(samples_h[,23]), type = "l", main = expression(log(1/nu)),
+     ylab = expression(log(1/nu)), xlab = "Iteration")
+```
+
+```{r}
+p_h <- samples_h[,23] / (samples_h[,23] + samples_h[,22])
+plot(density(p_h), main = "Posterior of p under prior (7)", xlab = "p")
+```
+To sample from the posterior under the prior in (7), I implemented a Metropolis-within-Gibbs sampler. The updates for $\mu$ and $\gamma_i$ remain unchanged from part (c), since their full conditional distributions are still normal. However, under the prior
+\[
+\pi(\nu,\tau)\propto \frac{1}{(\nu+\tau)^2},
+\]
+the full conditional distributions for $\tau$ and $\nu$ are no longer Gamma distributions. Therefore, these parameters were updated using Metropolis–Hastings steps.
+
+As proposal distributions, I used the Gamma full conditionals derived in part (f):
+\[
+\tau' \sim \Gamma\left(\frac{N}{2},\frac12\sum (y-\mu-\gamma_i)^2\right),
+\qquad
+\nu' \sim \Gamma\left(\frac{m}{2},\frac12\sum \gamma_i^2\right).
+\]
+This results in acceptance probabilities
+\[
+A_\tau =
+\min\!\left(
+1,
+\frac{\tau'}{(\nu+\tau')^2}\frac{(\nu+\tau)^2}{\tau}
+\right),
+\]
+and
+\[
+A_\nu =
+\min\!\left(
+1,
+\frac{\nu'}{(\nu'+\tau)^2}\frac{(\nu+\tau)^2}{\nu}
+\right).
+\]
+
+Running the sampler for 20000 iterations produced acceptance rates of approximately $0.97$ for $\tau$ and $0.92$ for $\nu$, indicating that the proposal distributions lead to very efficient updates.
+
+The trace plots show that the chains for $\mu$ and $1/\tau$ remain stable and well-behaved, similar to the earlier results. Importantly, the behavior of the random intercept variance $1/\nu$ is now considerably more stable than in part (f). The trace plot shows smaller fluctuations and no extreme excursions, and the trace of $\log(1/\nu)$ appears well-mixed without large spikes. This indicates improved convergence properties under the new prior.
+
+The posterior distribution of the variance proportion
+\[
+p = \frac{\nu^{-1}}{\nu^{-1} + \tau^{-1}}
+\]
+is concentrated around moderate values, suggesting that a substantial but not dominant fraction of the total variance is explained by the random intercept. Unlike the earlier prior, the prior in (7) induces a uniform prior on $p$, avoiding the strong concentration near 0 and 1 that occurred under the Gamma prior in part (e). Consequently, the posterior under this prior appears more stable and interpretable.
+
+Overall, the Gibbs sampler with the prior in (7) shows better convergence properties than the sampler using the improper scale prior in part (f), particularly for the random intercept variance component.
+
+\section*{Problem 3}
+
 
 \section*{Problem 4}
 
