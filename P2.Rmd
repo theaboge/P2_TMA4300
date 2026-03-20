@@ -949,6 +949,7 @@ Overall, the Gibbs sampler with the prior in (7) shows better convergence proper
 \section*{Problem 3}
 
 
+
 \section*{Problem 4}
 
 We consider the state equation
@@ -1103,35 +1104,68 @@ parameters <- list(
 obj <- MakeADFun(f, parameters, random = "u")
 ```
 
-### c)
+## c)
 
-The marginal likelihood was maximized using the \texttt{nlminb} optimizer. The optimisation converged successfully, with a small gradient norm at the optimum, indicating a stable solution.
+The Laplace approximation of the marginal likelihood was maximised using the \texttt{nlminb} optimizer. The optimisation converged successfully, with convergence code 0 and a message indicating both parameter and relative convergence. The maximum absolute gradient at the optimum was $8.96 \cdot 10^{-7}$, which is close to zero and confirms that a stationary point was reached.
 
-```{r, echo=FALSE, results = 'hide', message=FALSE, warning=FALSE}
+```{r, echo=FALSE, results= 'hide', message=FALSE, warning=FALSE}
+
+# Optimization
 opt <- nlminb(obj$par, obj$fn, obj$gr)
+
+# Report
 sdr <- sdreport(obj)
 
+# Extract latent states
 u_ests <- summary(sdr, "random")[, 1]
 u_ses  <- summary(sdr, "random")[, 2]
+
+# Extract parameter estimates
+par_est <- summary(sdr, "fixed")
+
+# Convergence diagnostics
+grad_max <- max(abs(obj$gr(opt$par)))
+conv <- opt$convergence
 ```
 
-```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.pos="H"}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+opt$convergence      # 0 = success
+opt$message          # should say something like "relative convergence"
+opt$objective
+max(abs(obj$gr(opt$par)))  # gradient size
+```
+
+Parameter estimates and standard errors were obtained using \texttt{sdreport}, which is based on a Gaussian approximation around the optimum using the curvature of the objective function. In particular, \texttt{sdreport} provides both the estimated latent states and their uncertainties.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.pos="H"}
+
 par(mfrow = c(2, 1), mar = c(4, 4, 2, 1))
 
-plot(u_ests, type = "l", col = "blue", lwd = 2, 
-     main = "Estimated Log-Density (u_t)", ylab = "u_t", xlab = "Time")
+# Plot latent states
+plot(u_ests, type = "l", col = "blue", lwd = 2,
+     main = "Estimated latent log-population dynamics", ylab = "Log-population u_t", xlab = "Time")
 lines(u_ests + 1.96 * u_ses, col = "blue", lty = 2)
 lines(u_ests - 1.96 * u_ses, col = "blue", lty = 2)
 
-plot(y, type = "p", pch = 16, col = "gray", 
-     main = "Observed y_t and estimated exp(u_t)", ylab = "Counts", xlab = "Time")
+# Plot observations vs fitted
+plot(y, type = "p", pch = 16, col = "gray",
+     main = "Observed counts y_t and model-based expected counts exp(u_t)",
+     ylab = "Counts", xlab = "Time")
 lines(exp(u_ests), col = "red", lwd = 2)
-legend("topright", legend = c("Observed y_t", "exp(u_t)"), 
-       col = c("gray", "red"), pch = c(16, NA), lty = c(NA, 1))
+
+legend("topright",
+       legend = c("y_t", "exp(u_t)"),
+       col = c("gray", "red"),
+       pch = c(16, NA), lty = c(NA, 1), bty = "n")
+
 ```
 
-The estimated latent states correspond to the conditional modes obtained from the Laplace approximation. Since \(c=1\), the observation mean is \(E[y_t \mid u_t] = e^{u_t}\). The fitted trajectory captures the overall trend of the data while smoothing out the Poisson noise, reflecting the underlying process dynamics.
 
+The estimated latent states $\hat{u}_t$ are shown in the first plot. Since $u_t$ represents the latent log-population, this plot describes the model’s estimate of the underlying population dynamics on the log-scale. The trajectory is smooth over time because the latent states are constrained by the theta-logistic state model, and the confidence bands are relatively narrow, suggesting that the latent process is well informed by the data.
+
+The second plot compares the observed counts $y_t$ with the fitted values $\exp(\hat{u}_t)$, which represent the model-based expected counts on the original scale. The fitted curve follows the observed data closely, including periods of rapid increase and decline, showing that the model captures the main structure of the data well. At the same time, the fitted values are not obtained by fitting each time point independently, but through the latent state process, which imposes temporal dependence and yields a coherent trajectory over time.
+
+Overall, the model provides a good fit and successfully recovers an underlying latent population process from noisy count observations.
 
 ### d)
 
@@ -1246,5 +1280,8 @@ Since parameters are optimized on the log-scale, the Delta method is used to obt
 \]
 
 Overall, the standard errors appear to be of a reasonable magnitude, and the agreement between estimated and true parameter values provides empirical support for the reliability of the Laplace approximation in this model.
+
+
+
 
 
