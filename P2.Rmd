@@ -10,7 +10,7 @@ header-includes:
 ---
 
 ```{r setup, echo=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ```{r, echo=FALSE}
@@ -61,7 +61,7 @@ f_{U \mid Z}(u \mid z) = \frac{1}{e^{-z^2/2}} = e^{z^2/2},\quad 0 < u < e^{-z^2/
 Hence,
 \[
 U \mid Z = z \sim \mathrm{Unif} \big(0, e^{-z^2/2}\big).
-\]. 
+\]
 
 ### Conditional ditribution of $Z|U=u$
 Fix $u$. The support condition is $0 < u < e^{-z^2/2}$.
